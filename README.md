@@ -3,7 +3,7 @@
 A 3-master / 2-worker OpenShift 4.18 cluster installed with the UPI method (`platform: none`) on VMware Workstation VMs, pulling all content from a local Red Hat Quay mirror registry.
 
 - [Architecture](#architecture)
-- [Environmental Services (utility node)](#environmental-services-utility-node)
+- [Helper Node Services](#helper-node-services)
 - [Prepare the install-config](#prepare-the-install-config)
 - [Generate the Ignition files](#generate-the-ignition-files)
 - [Deploy OpenShift](#deploy-openshift)
