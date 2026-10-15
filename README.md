@@ -1,4 +1,4 @@
-# OpenShift 4.18 Bare Metal Install – User Provisioned Infrastructure (UPI) – Disconnected Lab
+# OpenShift Installation with User Provisioned Infrastructure (UPI) in Disconnected Lab
 
 A 3-master / 2-worker OpenShift 4.18 cluster installed with the UPI method (`platform: none`) on VMware Workstation VMs, pulling all content from a local Red Hat Quay mirror registry.
 
