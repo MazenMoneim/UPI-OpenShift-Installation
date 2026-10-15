@@ -1,30 +1,17 @@
 
-# OpenShift Installation with User Provisioned Infrastructure (UPI) in Disconnected Lab
+<div align="center">
 
+#  OpenShift Installation with UPI in Disconnected Lab
 
+A 3-master and 2-worker OpenShift 4.18 cluster installed with the UPI method on Red Hat Labs VMs, pulling all content from a local Red Hat Quay mirror registry.
 
-<p align="center">
-  <strong>
-    A step-by-step guide to deploying OpenShift Container Platform in a disconnected environment using UPI method.
-  </strong>
-  <br><br>
-  Covers infrastructure preparation, DNS, load balancing, Quay registry setup, image mirroring, certificates, and cluster installation.
-</p>
+![OpenShift](https://img.shields.io/badge/OpenShift-EE0000?logo=redhatopenshift&logoColor=white)
+![Quay.io](https://img.shields.io/badge/Quay.io-Registry-4C1?logo=redhat&logoColor=white)
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Red%20Hat-OpenShift-EE0000?logo=redhat&logoColor=white" alt="OpenShift"/>
-  <img src="https://img.shields.io/badge/Installation-UPI-blue" alt="UPI"/>
-  <img src="https://img.shields.io/badge/Environment-Disconnected-orange" alt="Disconnected Environment"/>
-  <img src="https://img.shields.io/badge/Registry-Quay-FF5A1F?logo=redhat&logoColor=white" alt="Quay"/>
-  <img src="https://img.shields.io/badge/Platform-Linux-black?logo=linux&logoColor=white" alt="Linux"/>
-  <img src="https://img.shields.io/badge/Automation-Bash-4EAA25?logo=gnubash&logoColor=white" alt="Bash"/>
-</p>
+</div>
 
 ---
 
-
-
-A 3-master / 2-worker OpenShift 4.18 cluster installed with the UPI method (`platform: none`) on VMware Workstation VMs, pulling all content from a local Red Hat Quay mirror registry.
 
 - [Architecture](#architecture)
 - [Quay Installation and OpenShift Image Mirroring](#quay-installation-and-openShift-image-mirroring)
