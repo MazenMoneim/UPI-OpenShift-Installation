@@ -330,7 +330,13 @@ additionalTrustBundle: |
   Lw6wxPyuXifM+Q==
   -----END CERTIFICATE-----
 ```
+Think of it like an ID card:
+- Quay is a person showing an ID card (its certificate) that says “I am registry.ocp4.example.com”.
+- Your CA is the office that issued and stamped that ID card. You created this office yourself in the earlier lesson.
+- OpenShift is the security guard checking the ID.
 
+The guard only accepts IDs stamped by offices it knows. It has never heard of your homemade office, so it rejects Quay’s ID with an error.
+additionalTrustBundle is you handing the guard a sample of your office’s stamp and saying “trust IDs with this stamp.” Now when Quay shows its ID, the guard recognizes the stamp and lets it in.
 
 **Back up the file** – the installer consumes (deletes) it:
 
