@@ -19,47 +19,21 @@ A 3-master / 2-worker OpenShift 4.18 cluster installed with the UPI method (`pla
 ---
 
 ## Architecture
+<img width="2108" height="3000" alt="CamScanner 15-10-2026 15 41" src="https://github.com/user-attachments/assets/532bb214-cbab-4a2b-91b5-e9dd72754a5a" />
 
-```
-                         ┌──────────────────────────────┐
-  workstation ──────────▶│ utility  192.168.50.254      │
-  172.25.250.9           │ DNS · DHCP/PXE · httpd:8080  │
-  (openshift-install,    │ HAProxy (6443/22623/80/443)  │
-   oc, SSH key)          └──────────────┬───────────────┘
-                                        │ 192.168.50.0/24
-     ┌─────────────┬─────────────┬──────┴──────┬─────────────┬─────────────┐
-  master01      master02      master03      worker01     bootstrap→worker02  registry (Quay)
-  .10           .11           .12           .13          .14                 .50
-```
 
-| Host | Role | IP | MAC |
-|---|---|---|---|
-| workstation | Admin host: `openshift-install`, `oc`, SSH key | 172.25.250.9 | – |
-| utility | DNS (BIND), DHCP + PXE, httpd :8080, HAProxy, gateway | 192.168.50.254 | – |
-| registry | Red Hat Quay mirror – `registry.ocp4.example.com` | 192.168.50.50 | – |
-| master01 | Control plane | 192.168.50.10 | 52:54:00:00:32:0A |
-| master02 | Control plane | 192.168.50.11 | 52:54:00:00:32:0B |
-| master03 | Control plane | 192.168.50.12 | 52:54:00:00:32:0C |
-| worker01 | Compute | 192.168.50.13 | 52:54:00:00:32:0D |
-| bootstrap → worker02 | Temporary bootstrap, later reused as a worker | 192.168.50.14 | 52:54:00:00:32:0E |
-| classroom DNS | Upstream forwarder; the workstation's resolver | 172.25.250.254 | – |
-
-| Item | Value |
-|---|---|
-| Cluster name / base domain | `upi` / `ocp4.example.com` |
-| API | `api.upi.ocp4.example.com` → 192.168.50.254 (HAProxy) |
-| Apps wildcard | `*.apps.upi.ocp4.example.com` → 192.168.50.254 (HAProxy) |
-| OpenShift / RHCOS | 4.18.6 / `418.94.202501221327-0` |
-| Network type | OVNKubernetes – cluster `10.128.0.0/14`, services `172.30.0.0/16` |
-| Install directory | `~/upi-ocp4` on the workstation |
 
 ---
 
-## Environmental Services (utility node)
+## Helper Node Services
 
-### 1. DNS (BIND)
+### 1. DNS 
+```bash
 
-`/etc/named.conf` – relevant parts:
+dnf install bind bind-utils -y
+```
+
+`/etc/named.conf`:
 
 ```
 options {
@@ -135,7 +109,6 @@ $TTL  1D
 14   IN PTR bootstrap.upi.ocp4.example.com.
 ```
 
-> Every PTR must be a fully qualified name ending in a dot. A typo here (e.g. `master03.upiocp4.example.com.`) gives the node a wrong hostname.
 
 Validate and reload:
 
@@ -151,6 +124,10 @@ dig +short -x 192.168.50.10 @192.168.50.254                # master01.upi.ocp4.e
 ```
 
 ### 2. DHCP + PXE
+
+```bash
+dnf install dhcp-server -y
+```
 
 `/etc/dhcp/dhcpd.conf` – fixed addresses per MAC; nodes PXE-boot from the utility (`next-server 192.168.50.254`):
 
@@ -186,7 +163,12 @@ systemctl restart dhcpd
 ```
 
 ### 3. Web server (httpd on port 8080)
-
+```bash
+dnf install httpd -y
+```
+```bash
+sed -i 's/Listen 80/Listen 0.0.0.0:8080/' /etc/httpd/conf/httpd.conf
+```
 HAProxy owns port 80, so httpd listens on 8080. It serves the RHCOS live `rootfs.img` used by the PXE boot (`coreos.live.rootfs_url=http://192.168.50.254:8080/attach_iso/rootfs.img`), and can also serve ignition files if you install with `--ignition-url`.
 
 ```bash
@@ -198,6 +180,9 @@ curl -sI http://192.168.50.254:8080/attach_iso/rootfs.img | head -1   # 200 OK
 > httpd is only needed while nodes are being booted/installed. The running cluster never uses it.
 
 ### 4. HAProxy
+```bash
+dnf install haproxy -y
+```
 
 `/etc/haproxy/haproxy.cfg` – OpenShift section, **install phase** (bootstrap included in 6443 and 22623):
 
@@ -258,7 +243,7 @@ backend ingress_secure_backend_ocp4
   server worker01 192.168.50.13:443 check
 ```
 
-Rules of thumb:
+Notes:
 
 - **6443 (API) and 22623 (Machine Config Server)** → bootstrap + masters only. Workers never serve these ports.
 - **80 / 443 (ingress)** → the nodes that run router pods. Masters are included because they are schedulable in this cluster (see `compute.replicas: 0` below).
@@ -269,7 +254,6 @@ setsebool -P haproxy_connect_any 1
 systemctl enable --now haproxy
 ```
 
-Stats page: `http://192.168.50.254:32700` – useful to watch backends turn green during the install.
 
 ### 5. Firewall (if firewalld is enabled on the utility node)
 
@@ -347,11 +331,6 @@ additionalTrustBundle: |
   -----END CERTIFICATE-----
 ```
 
-Optional check that this CA really signed the registry certificate (expect `Verify return code: 0 (ok)`):
-
-```bash
-openssl s_client -connect registry.ocp4.example.com:443 -CAfile ~/DO0031L/labs/ca/ca-cert.pem </dev/null 2>/dev/null | grep 'Verify return code'
-```
 
 **Back up the file** – the installer consumes (deletes) it:
 
@@ -406,8 +385,7 @@ PXE-boot the bootstrap VM (192.168.50.14) with `bootstrap.ign`. It can run from 
    done
    ```
 
-3. While each VM is off: **VMware → VM Settings → disconnect the CD/DVD, or put Hard Disk first in the boot order.** Otherwise it boots the live image again.
-4. Power the masters on. On first boot from disk they fetch their full config from `api-int.upi.ocp4.example.com:22623`, run firstboot, reboot once, and start the kubelet.
+3. Power the masters on. On first boot from disk they fetch their full config from `api-int.upi.ocp4.example.com:22623`, run firstboot, reboot once, and start the kubelet.
 
 #### Alternative: self-installing ISO per role (no httpd, no typing)
 
@@ -421,8 +399,8 @@ done
 
 Boot each VM from its role ISO → it installs to `/dev/sda` → detach the ISO → boot from disk.
 
-> `--dest-ignition` / `coreos.inst.ignition_url=` → installs to disk ✅
-> `ignition.config.url=` / `iso ignition embed` with a node config → configures the **live** system only ❌
+> `--dest-ignition` / `coreos.inst.ignition_url=` → installs to disk 
+> `ignition.config.url=` / `iso ignition embed` with a node config → configures the **live** system only 
 
 ---
 
@@ -433,6 +411,7 @@ From the **workstation**:
 ```bash
 openshift-install --dir ~/upi-ocp4 wait-for bootstrap-complete --log-level=debug
 ```
+<img width="1118" height="442" alt="image" src="https://github.com/user-attachments/assets/bb151cb6-9f7b-46a5-9d98-ef8bd8cc800a" />
 
 In a second terminal:
 
@@ -442,6 +421,8 @@ oc get nodes                 # master01-03 should appear and go Ready
 oc get csr                   # master CSRs are auto-approved during bootstrap
 oc get co
 ```
+<img width="716" height="184" alt="image" src="https://github.com/user-attachments/assets/2c5a82b9-ed69-4d16-a897-0d2ef15234f1" />
+<img width="884" height="223" alt="image" src="https://github.com/user-attachments/assets/4110731d-aa5c-4db1-90b4-b6a93bbb1655" />
 
 On the bootstrap node itself:
 
@@ -487,8 +468,6 @@ Bootstrap completes once etcd runs on **all three** masters. Typical duration: 2
    oc get nodes
    ```
 
-> If you lose `worker.ign`, regenerate it from the cluster:
-> `oc extract -n openshift-machine-api secret/worker-user-data --keys=userData --to=- > worker.ign`
 
 ---
 
@@ -500,8 +479,7 @@ watch oc get co        # all AVAILABLE=True, PROGRESSING=False, DEGRADED=False
 ```
 
 The output prints the console URL and the `kubeadmin` password (also in `~/upi-ocp4/auth/kubeadmin-password`).
-
-> Leave the cluster running for the first **24 hours** so the initial certificates rotate. If the VMs are suspended before that, approve the pending CSRs when they come back.
+<img width="1294" height="266" alt="image" src="https://github.com/user-attachments/assets/10e5caad-3b9d-41d5-88f9-cbea6cb65464" />
 
 ---
 
@@ -547,8 +525,6 @@ systemctl restart dhcpd
 haproxy -c -f /etc/haproxy/haproxy.cfg && systemctl reload haproxy
 ```
 
-Then PXE-boot the VM (network first in the boot order), install it with `worker.ign` exactly like worker01, switch the boot order back to disk, and approve its CSRs.
-
 ---
 
 ## Post-install
@@ -584,6 +560,7 @@ EOF
 ```
 
 Console: `https://console-openshift-console.apps.upi.ocp4.example.com`
+<img width="1714" height="927" alt="Untitled picture" src="https://github.com/user-attachments/assets/2ed17a21-0de8-4300-b150-781bed61239e" />
 
 ### Clean up
 
@@ -693,24 +670,6 @@ Live if: `coreos.live.rootfs_url=` in the cmdline, `/` and `/sysroot` on `loop` 
 
 **Fix:** see [Disable the default OperatorHub catalogs](#disable-the-default-operatorhub-catalogs-disconnected). Check the exact reason with `oc describe pod -n openshift-marketplace <pod> | grep -A3 -i failed`.
 
-### Useful diagnostics
-
-```bash
-# Collect logs from bootstrap + masters into one bundle
-openshift-install gather bootstrap --dir ~/upi-ocp4 \
-  --bootstrap 192.168.50.14 \
-  --master 192.168.50.10 --master 192.168.50.11 --master 192.168.50.12
-
-# On a node
-hostname; cat /etc/resolv.conf
-getent hosts api-int.upi.ocp4.example.com
-curl -sk https://api-int.upi.ocp4.example.com:6443/version
-systemctl is-active machine-config-daemon-firstboot kubelet crio
-sudo journalctl -b -u kubelet --no-pager | tail -40
-
-# Is the bootstrap serving ignition through HAProxy?
-curl -k https://api-int.upi.ocp4.example.com:22623/config/master | head -c 200
-```
 
 ---
 
