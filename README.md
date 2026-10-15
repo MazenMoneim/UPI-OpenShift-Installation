@@ -3,6 +3,7 @@
 A 3-master / 2-worker OpenShift 4.18 cluster installed with the UPI method (`platform: none`) on VMware Workstation VMs, pulling all content from a local Red Hat Quay mirror registry.
 
 - [Architecture](#architecture)
+- [Quay Installation and OpenShift Image Mirroring](#quay-installation-and-openShift-image-mirroring)
 - [Helper Node Services](#helper-node-services)
 - [Prepare the install-config](#prepare-the-install-config)
 - [Generate the Ignition files](#generate-the-ignition-files)
@@ -19,12 +20,121 @@ A 3-master / 2-worker OpenShift 4.18 cluster installed with the UPI method (`pla
 ---
 
 ## Architecture
-<img width="2108" height="3000" alt="CamScanner 15-10-2026 15 41" src="https://github.com/user-attachments/assets/532bb214-cbab-4a2b-91b5-e9dd72754a5a" />
+<img width="2215" height="3116" alt="CamScanner 15-10-2026 16 47" src="https://github.com/user-attachments/assets/1718c3a3-f32d-4d73-9ce3-196f64bf19a2" />
 
 
 
 ---
 
+## Quay Installation and OpenShift Image Mirroring
+
+### 1. Install Quay
+
+Download the `mirror-registry` utility from the Red Hat OpenShift
+downloads page, then run:
+
+``` bash
+chmod +x ./mirror-registry
+./mirror-registry install --quayHostname registry.ocp4.example.com --quayRoot "$HOME/quay-install"
+```
+
+Check the registry containers:
+
+``` bash
+podman ps
+```
+
+### 2. Check DNS and TLS
+
+Ensure `registry.ocp4.example.com` resolves to the registry host IP from
+the workstation and cluster nodes.
+
+If Quay uses a private CA, install its CA certificate on the mirroring
+host:
+
+``` bash
+sudo cp registry-ca.crt /etc/pki/ca-trust/source/anchors/
+sudo update-ca-trust
+```
+
+### 3. Log in
+
+``` bash
+podman login registry.redhat.io
+podman login registry.access.redhat.com
+podman login registry.ocp4.example.com
+```
+
+Use your Red Hat credentials for source registries and your Quay
+credentials for the destination.
+
+### 4. Mirror the images
+
+Review the lab configuration (no changes needed):
+
+``` bash
+cat ~/DO0032L/labs/install-prepare/image-set-config.yaml
+```
+``` bash
+---
+kind: ImageSetConfiguration
+apiVersion: mirror.openshift.io/v2alpha1
+mirror:
+  platform:
+    channels:
+      - name: stable-4.18
+        type: ocp
+        minVersion: 4.18.6
+        maxVersion: 4.18.6
+    graph: true
+  operators:
+    - catalog: registry.redhat.io/redhat/redhat-operator-index:v4.18
+      packages:
+        - name: node-maintenance-operator  1
+          channels:
+            - name: stable
+              minVersion: 5.4.0
+              maxVersion: 5.4.0
+    - catalog: registry.redhat.io/redhat/certified-operator-index:v4.18
+      packages:
+        - name: crunchy-postgres-operator  2
+          channels:
+            - name: v5
+              minVersion: 5.8.1
+              maxVersion: 5.8.1
+  additionalImages:
+    - name: registry.access.redhat.com/ubi9/ubi:latest
+    - name: registry.access.redhat.com/ubi9/toolbox:latest
+```
+
+
+Run `oc mirror`:
+
+``` bash
+oc mirror --v2 \
+  --config ~/DO0032L/labs/install-prepare/image-set-config.yaml \
+  --workspace file://mirror/ \
+  docker://registry.ocp4.example.com
+```
+
+Keep the `mirror/` workspace; it contains resources needed for cluster
+installation. If transient image-copy errors occur, review the failed
+items and rerun the command.
+
+### 5. Verify
+
+Open `https://registry.ocp4.example.com`, sign in, and verify that the
+`ubi9/toolbox` repository exists.
+
+Check generated resources:
+
+``` bash
+ls mirror/working-dir/cluster-resources/
+```
+
+Common output includes `idms-oc-mirror.yaml` and `updateService.yaml`.
+
+---
 ## Helper Node Services
 
 ### 1. DNS 
